@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>たなばたリトミック</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+<style>
+body{margin:0;font-family:sans-serif;background:#071a45;color:white;text-align:center;overflow:hidden}
+#video{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;transform:scaleX(-1);opacity:.22}
+#game{
+  display:none;
+  position:relative;
+  z-index:2;
+  min-height:100vh;
+  padding:20px;
+  box-sizing:border-box;
+  background:linear-gradient(rgba(5,15,45,.65),rgba(35,65,150,.78));
+}
+
+#passwordScreen{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  background:#071a45;
+  color:white;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:16px;
+}
+
+#passwordInput{
+  font-size:22px;
+  padding:14px;
+  border-radius:12px;
+  border:none;
+}
+
+#passwordError{
+  color:#ffd75a;
+  font-weight:bold;
+}
+h1{font-size:28px}
+#count,#score{font-size:20px;margin:6px}
+#illust{font-size:82px;margin:18px}
+#title{font-size:30px;font-weight:bold}
+#msg{font-size:23px;line-height:1.6;background:rgba(255,255,255,.18);border-radius:24px;padding:18px;margin:12px auto;max-width:620px}
+button{font-size:22px;padding:14px 30px;border:none;border-radius:999px;background:#ffd75a;font-weight:bold;margin:8px}
+#judge{font-size:27px;font-weight:bold;color:#ffe96b;margin-top:14px}
+.starGame{position:relative;height:260px;margin-top:10px}
+.gameStar{position:absolute;font-size:48px;animation:pop .5s ease,twinkle .8s infinite alternate}
+.choice{display:block;margin:10px auto;padding:14px;width:85%;max-width:420px;border-radius:20px;background:white;color:#333;font-size:22px;font-weight:bold}
+.bgstar{position:fixed;color:white;opacity:.75;animation:fall linear infinite;z-index:1}
+@keyframes pop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes twinkle{from{transform:scale(1)}to{transform:scale(1.25)}}
+@keyframes fall{from{transform:translateY(-10vh)}to{transform:translateY(110vh)}}
+</style>
+</head>
+
+<body>
+<div id="passwordScreen">
+  <h1>🎋 七夕リトミック</h1>
+  <p>パスワードを入れてください</p>
+  <input id="passwordInput" type="password" placeholder="パスワード">
+  <button onclick="checkPassword()">はじめる</button>
+  <p id="passwordError"></p>
+</div>
+<video id="video" autoplay playsinline></video>
+
+<div id="game">
+  <h1>🎋 たなばたリトミック 🎵</h1>
+  <div id="count">1 / 8</div>
+  <div id="score">⭐ 0</div>
+  <div id="illust">🎋✨</div>
+  <div id="title"></div>
+  <div id="msg"></div>
+  <div id="area"></div>
+  <div id="judge">スタートを おしてね</div>
+  <button onclick="startGame()">スタート</button>
+  <button onclick="toggleMusic()">BGM</button>
+</div>
+
+<script>
+const stages=[
+{title:"きらきらたいそう",illust:"✨🙌✨",msg:"おててを うえ！<br>きらきら じゅんびをしよう♪",action:"kirakira",seconds:60,bgm:[523,659,784,659,523]},
+{title:"おともだちと なかよく",illust:"👦👧💛",msg:"こんにちは♪<br>いっしょに あいさつしよう！",action:"friend",seconds:35,bgm:[392,440,494,523,494,440]},
+{title:"おりひめと ひこぼしに あいにいこう",illust:"🌌👘",msg:"リズムに あわせて<br>あるこう♪",action:"walk",seconds:50,bgm:[523,587,659,523,587,659]},
+{title:"ほしを あつめよう",illust:"⭐⭐⭐",msg:"ほしを 10こ あつめよう！",action:"starGame",seconds:90,bgm:[784,880,988,880,784]},
+{title:"おねがいごとを えらぼう",illust:"🎋💛",msg:"たんざくを えらんでね♪",action:"wish",seconds:45,bgm:[392,523,659,523,392]},
+{title:"あまのがわを わたろう",illust:"🌌🌟",msg:"りょうてを ひろげて<br>10かい ゆらゆらしよう♪",action:"balance",seconds:90,bgm:[349,440,523,440,349]},
+{title:"きらきら ダンス",illust:"⭐🎵",msg:"りょうてを あげて<br>8かい おどろう♪",action:"danceSlow",seconds:80,bgm:[659,784,880,988,880,784]},
+{title:"ゴール！",illust:"🎉🌟🎋",msg:"よくできたね！<br>みんなの ねがいが かないますように♪",action:"finish",seconds:40,bgm:[523,659,784,1046,784,1046]}
+];
+
+let index=0,score=0,autoStageTimer=null,musicOn=false,musicTimer=null,bgmStep=0,lastAction=0,cameraStarted=false;
+let starsCollected=0,targetStars=10,balanceCount=0,waveCount=0,danceCount=0,walkCount=0,stageCleared=false;
+let handHoldStart=null,danceHoldStart=null,lastLeftAnkleY=null,lastRightAnkleY=null;
+let kirakiraStep=0,kirakiraHold=null,lastHipY=null;
+let friendStep=0,friendHold=null;
+
+const AudioContext=window.AudioContext||window.webkitAudioContext;
+let audioCtx=null;
+
+function piano(freq=600,dur=.28){
+ if(!audioCtx)return;
+ const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+ o.frequency.value=freq;o.type="triangle";
+ g.gain.setValueAtTime(.16,audioCtx.currentTime);
+ g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);
+ o.connect(g);g.connect(audioCtx.destination);
+ o.start();o.stop(audioCtx.currentTime+dur);
+}
+function successSound(){piano(523,.16);setTimeout(()=>piano(659,.16),80);setTimeout(()=>piano(784,.2),160);setTimeout(()=>piano(1046,.3),260)}
+function clearSound(){piano(523,.12);setTimeout(()=>piano(659,.12),100);setTimeout(()=>piano(784,.12),200);setTimeout(()=>piano(1046,.35),320)}
+
+function startStageBgm(){
+ if(musicTimer)clearInterval(musicTimer);
+ bgmStep=0;
+ musicTimer=setInterval(()=>{
+   if(!musicOn)return;
+   const melody=stages[index].bgm;
+   piano(melody[bgmStep%melody.length],.34);
+   bgmStep++;
+ },900);
+}
+function toggleMusic(){if(!audioCtx)audioCtx=new AudioContext();musicOn=!musicOn;if(musicOn)startStageBgm()}
+
+function startGame(){
+ if(!audioCtx)audioCtx=new AudioContext();
+ musicOn=true;startStageBgm();
+ if(!cameraStarted){startCamera();cameraStarted=true}
+ showStage();
+ document.getElementById("judge").textContent="カメラで うごきを みているよ♪";
+}
+
+function showStage(){
+ clearTimeout(autoStageTimer);
+ stageCleared=false;balanceCount=0;waveCount=0;danceCount=0;walkCount=0;
+ handHoldStart=null;danceHoldStart=null;lastLeftAnkleY=null;lastRightAnkleY=null;
+ kirakiraStep=0;kirakiraHold=null;lastHipY=null;
+ friendStep=0;friendHold=null;
+
+ document.getElementById("count").textContent=`${index+1} / 8`;
+ document.getElementById("score").textContent=`⭐ ${score}`;
+ document.getElementById("title").textContent=stages[index].title;
+ document.getElementById("illust").textContent=stages[index].illust;
+ document.getElementById("msg").innerHTML=stages[index].msg;
+ document.getElementById("area").innerHTML="";
+
+ if(stages[index].action==="starGame")startStarGame();
+ else if(stages[index].action==="wish")showWish();
+ else if(stages[index].action==="finish"){document.getElementById("judge").textContent=`よくできたね！ ⭐${score}こ`;clearSound()}
+ else document.getElementById("judge").textContent="うごきができたら つぎへ すすむよ♪";
+
+ startStageBgm();
+}
+
+function nextStage(){index++;if(index>=stages.length){index=0;score=0}showStage()}
+function addStageScore(){if(stageCleared)return;stageCleared=true;score++;document.getElementById("score").textContent=`⭐ ${score}`}
+
+function startStarGame(){
+ starsCollected=0;
+ document.getElementById("area").innerHTML=`<div class="starGame" id="starGame"></div>`;
+ document.getElementById("judge").textContent=`⭐ 0 / ${targetStars}`;
+ createStar();
+}
+function createStar(){
+ const box=document.getElementById("starGame");if(!box)return;
+ box.innerHTML="";
+ const star=document.createElement("div");
+ star.textContent=starsCollected===targetStars-1?"🌈⭐":"⭐";
+ star.className="gameStar";
+ star.style.left=(Math.random()*90+2)+"%";
+ star.style.top=(Math.random()*80+2)+"%";
+ star.onclick=collectStar;
+ box.appendChild(star);
+}
+function collectStar(){
+ starsCollected++;
+ successSound();
+ document.getElementById("judge").textContent=`⭐ ${starsCollected} / ${targetStars}`;
+ if(starsCollected>=targetStars){
+   addStageScore();
+   document.getElementById("area").innerHTML="<h2>🎉 やったー！ほしが あつまったよ！</h2>";
+   document.getElementById("judge").textContent="つぎの ステージへ すすむよ♪";
+   clearSound();
+   setTimeout(nextStage,3500);
+ }else createStar();
+}
+
+function showWish(){
+ document.getElementById("area").innerHTML=`
+ <button class="choice" onclick="chooseWish('おともだちと なかよくなれますように')">💛 おともだちと なかよく</button>
+ <button class="choice" onclick="chooseWish('さっかーせんしゅになりたい')">🩷 さっかーせんしゅになりたい</button>
+ <button class="choice" onclick="chooseWish('けーきやさんになりたい')">💚 けーきやさんになりたい</button>
+ <button class="choice" onclick="chooseWish('ぴあにすとになりたい')">💙 ぴあにすとになりたい</button>`;
+ document.getElementById("judge").textContent="すきな たんざくを えらんでね♪";
+}
+function chooseWish(text){
+ if(stageCleared)return;
+ addStageScore();
+ document.getElementById("area").innerHTML=`<h2>🎋 ${text} 🎋</h2>`;
+ document.getElementById("judge").textContent="たんざくを かざったよ♪";
+ clearSound();
+ setTimeout(nextStage,3500);
+}
+
+function completeKirakira(){
+ addStageScore();
+ document.getElementById("judge").textContent="きらきら じゅんびOK！✨";
+ clearSound();
+ setTimeout(nextStage,3500);
+}
+
+function onPoseResults(results){
+ if(!results.poseLandmarks)return;
+ const lm=results.poseLandmarks;
+ const lw=lm[15],rw=lm[16],ls=lm[11],rs=lm[12];
+ const lh=lm[23],rh=lm[24],la=lm[27],ra=lm[28];
+ const action=stages[index].action;
+ const now=Date.now();
+
+ if(action==="kirakira"){
+   const bothUp=lw.y<ls.y-0.1 && rw.y<rs.y-0.1;
+   const sideOpen=Math.abs(lw.x-rw.x)>.45 && lw.y<lh.y && rw.y<rh.y;
+   const hipY=(lh.y+rh.y)/2;
+   const jump=lastHipY!==null && Math.abs(hipY-lastHipY)>0.018;
+
+   let ok=false;
+   const names=["おててを うえ！","よこに ひろげよう！","おほしさま タッチ！","ジャンプ！","キラキラ ポーズ！"];
+
+   if(kirakiraStep===0 && bothUp)ok=true;
+   if(kirakiraStep===1 && sideOpen)ok=true;
+   if(kirakiraStep===2 && bothUp)ok=true;
+   if(kirakiraStep===3 && jump)ok=true;
+   if(kirakiraStep===4 && bothUp)ok=true;
+
+   document.getElementById("judge").textContent=names[kirakiraStep];
+
+   if(ok){
+     if(kirakiraHold===null)kirakiraHold=now;
+     if(now-kirakiraHold>700 && now-lastAction>1200){
+       lastAction=now;
+       kirakiraHold=null;
+       kirakiraStep++;
+       successSound();
+       document.getElementById("judge").textContent=`キラキラ ${kirakiraStep} / 5 ✨`;
+       if(kirakiraStep>=5)completeKirakira();
+     }
+   }else{
+     kirakiraHold=null;
+   }
+   lastHipY=hipY;
+ }
+
+
+ if(action==="friend"){
+   const handUp=(lw.y<ls.y-0.03)||(rw.y<rs.y-0.03);
+   const clap=Math.abs(lw.x-rw.x)<0.20;
+   const pose=Math.abs(lw.x-rw.x)>0.45 && lw.y<lh.y && rw.y<rh.y;
+
+   const names=["おててを あげよう！","おねがいのポーズ！","おててを　あげよう！"];
+   let ok=false;
+
+   if(friendStep===0 && handUp)ok=true;
+   if(friendStep===1 && clap)ok=true;
+   if(friendStep===2 && pose)ok=true;
+
+   document.getElementById("judge").textContent=names[friendStep];
+
+   if(ok){
+     if(friendHold===null)friendHold=now;
+
+     if(now-friendHold>800 && now-lastAction>1300){
+       lastAction=now;
+       friendHold=null;
+       friendStep++;
+       successSound();
+
+       if(friendStep<3){
+         document.getElementById("judge").textContent=`じょうず！ ${friendStep} / 3`;
+       }
+
+       if(friendStep>=3){
+         addStageScore();
+         document.getElementById("judge").textContent="おともだちに あいさつ できたね！";
+         clearSound();
+         setTimeout(nextStage,3500);
+       }
+     }
+   }else{
+     friendHold=null;
+   }
+ }
+
+ if(action==="wave"){
+   const handUp=(lw.y<ls.y-0.08)||(rw.y<rs.y-0.08);
+   if(handUp){
+     if(handHoldStart===null)handHoldStart=now;
+     if(now-handHoldStart>1500 && now-lastAction>2000){
+       lastAction=now;handHoldStart=null;waveCount++;
+       document.getElementById("judge").textContent=`てをふれたよ ${waveCount} / 5`;
+       successSound();
+       if(waveCount>=5){
+         addStageScore();
+         document.getElementById("judge").textContent="じょうずに てをふれたね🙌";
+         clearSound();
+         setTimeout(nextStage,3500);
+       }
+     }
+   }else handHoldStart=null;
+ }
+
+ if(action==="walk"){
+   if(lastLeftAnkleY!==null && lastRightAnkleY!==null){
+     const leftMove=Math.abs(la.y-lastLeftAnkleY);
+     const rightMove=Math.abs(ra.y-lastRightAnkleY);
+     const walking=(leftMove>0.015||rightMove>0.015)&&now-lastAction>1800;
+     if(walking){
+       lastAction=now;walkCount++;
+       document.getElementById("judge").textContent=`あるけたよ ${walkCount} / 10`;
+       successSound();
+       if(walkCount>=10){
+         addStageScore();
+         document.getElementById("judge").textContent="おりひめたちに ちかづいたよ🌌";
+         clearSound();
+         setTimeout(nextStage,3500);
+       }
+     }
+   }
+   lastLeftAnkleY=la.y;lastRightAnkleY=ra.y;
+ }
+
+ if(action==="balance"){
+   const open=Math.abs(lw.x-rw.x)>.45 && lw.y<lh.y && rw.y<rh.y;
+   if(open && now-lastAction>1800){
+     lastAction=now;balanceCount++;
+     document.getElementById("judge").textContent=`ゆらゆら ${balanceCount} / 10`;
+     successSound();
+     if(balanceCount>=10){
+       addStageScore();
+       document.getElementById("judge").textContent="あまのがわを わたれたよ🌌";
+       clearSound();
+       setTimeout(nextStage,3500);
+     }
+   }
+ }
+
+ if(action==="danceSlow"){
+   const bothHandsUp=lw.y<ls.y-0.1 && rw.y<rs.y-0.1;
+   if(bothHandsUp){
+     if(danceHoldStart===null)danceHoldStart=now;
+     if(now-danceHoldStart>700 && now-lastAction>1800){
+       lastAction=now;danceHoldStart=null;danceCount++;
+       document.getElementById("judge").textContent=`ダンス ${danceCount} / 8`;
+       successSound();
+       if(danceCount>=8){
+         addStageScore();
+         document.getElementById("judge").textContent="きらきらダンス できたね⭐";
+         clearSound();
+         setTimeout(nextStage,3500);
+       }
+     }
+   }else danceHoldStart=null;
+ }
+}
+
+function startCamera(){
+ const video=document.getElementById("video");
+ const pose=new Pose({locateFile:file=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
+ pose.setOptions({modelComplexity:0,smoothLandmarks:true,minDetectionConfidence:.5,minTrackingConfidence:.5});
+ pose.onResults(onPoseResults);
+ const camera=new Camera(video,{onFrame:async()=>{await pose.send({image:video})},width:640,height:480});
+ camera.start();
+}
+
+function makeStars(){
+ for(let i=0;i<35;i++){
+   const s=document.createElement("div");
+   s.className="bgstar";s.textContent="✦";
+   s.style.left=Math.random()*100+"vw";
+   s.style.fontSize=(12+Math.random()*20)+"px";
+   s.style.animationDuration=(5+Math.random()*8)+"s";
+   s.style.animationDelay=(Math.random()*5)+"s";
+   document.body.appendChild(s);
+ }
+}
+makeStars();
+showStage();
+</script>
+<script>
+function checkPassword(){
+  const pass = document.getElementById("passwordInput").value;
+  if(pass === "negaigoto"){
+    document.getElementById("passwordScreen").style.display = "none";
+    document.getElementById("game").style.display = "block";
+  }else{
+    document.getElementById("passwordError").textContent = "パスワードがちがいます";
+  }
+}
+</script>
+</body>
+</html>
