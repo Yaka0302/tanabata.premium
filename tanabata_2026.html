@@ -11,7 +11,40 @@
 <style>
 body{margin:0;font-family:sans-serif;background:#071a45;color:white;text-align:center;overflow:hidden}
 #video{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;transform:scaleX(-1);opacity:.22}
-#game{position:relative;z-index:2;min-height:100vh;padding:20px;box-sizing:border-box;background:linear-gradient(rgba(5,15,45,.65),rgba(35,65,150,.78))}
+#game{
+  display:none;
+  position:relative;
+  z-index:2;
+  min-height:100vh;
+  padding:20px;
+  box-sizing:border-box;
+  background:linear-gradient(rgba(5,15,45,.65),rgba(35,65,150,.78));
+}
+
+#passwordScreen{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  background:#071a45;
+  color:white;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:16px;
+}
+
+#passwordInput{
+  font-size:22px;
+  padding:14px;
+  border-radius:12px;
+  border:none;
+}
+
+#passwordError{
+  color:#ffd75a;
+  font-weight:bold;
+}
 h1{font-size:28px}
 #count,#score{font-size:20px;margin:6px}
 #illust{font-size:82px;margin:18px}
@@ -30,6 +63,13 @@ button{font-size:22px;padding:14px 30px;border:none;border-radius:999px;backgrou
 </head>
 
 <body>
+<div id="passwordScreen">
+  <h1>🎋 七夕リトミック</h1>
+  <p>パスワードを入れてください</p>
+  <input id="passwordInput" type="password" placeholder="パスワード">
+  <button onclick="checkPassword()">はじめる</button>
+  <p id="passwordError"></p>
+</div>
 <video id="video" autoplay playsinline></video>
 
 <div id="game">
@@ -352,6 +392,17 @@ function makeStars(){
 }
 makeStars();
 showStage();
+</script>
+<script>
+function checkPassword(){
+  const pass = document.getElementById("passwordInput").value;
+  if(pass === "tanabata2026"){
+    document.getElementById("passwordScreen").style.display = "none";
+    document.getElementById("game").style.display = "block";
+  }else{
+    document.getElementById("passwordError").textContent = "パスワードがちがいます";
+  }
+}
 </script>
 </body>
 </html>
