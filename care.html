@@ -197,7 +197,7 @@ button:focus{
 <div id="game">
   <h1>🎋 たなばたリトミック 🎵</h1>
   <div id="modeLabel">🌱 ゆっくり・やさしいモード</div>
-  <div class="smallNote">つらくなったら「おやすみ」ボタンを押してね</div>
+  <div class="smallNote">つらくなったら「おやすみ」ボタンをおしてね</div>
 
   <div id="count">1 / 8</div>
   <div id="score">⭐ 0</div>
@@ -208,7 +208,7 @@ button:focus{
   <div id="title"></div>
   <div id="msg"></div>
   <div id="schedule"></div>
-  <div id="calmBox">🌙 おやすみ中<br>深呼吸してね<br>もう大丈夫になったら「もどる」を押してね</div>
+  <div id="calmBox">🌙 おやすみ中<br>しんこきゅうしてね<br>もうだいじょうぶになったら「もどる」をおしてね</div>
   <div id="area"></div>
   <div id="judge">スタートを おしてね</div>
   <div id="cameraError" style="color:#ffe58a;font-size:18px;font-weight:bold;line-height:1.5;margin:8px auto;max-width:620px"></div>
@@ -490,11 +490,11 @@ function onPoseResults(results){
 async function startCamera(){
  const video=document.getElementById("video");
  const err=document.getElementById("cameraError");
- if(err)err.textContent="カメラを起動しています。許可画面が出たら「許可」を押してください。";
+ if(err)err.textContent="カメラをきどうしています。がめんが出たら「きょか」をおしてください。";
 
  try{
    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-     throw new Error("このブラウザではカメラが使えません");
+     throw new Error("このブラウザではカメラがつかえません");
    }
 
    // 先にカメラ許可を取得
@@ -517,12 +517,12 @@ async function startCamera(){
    });
 
    await camera.start();
-   if(err)err.textContent="カメラ起動OKです。うごきを見ています。";
+   if(err)err.textContent="カメラきどうOKです。うごきをみています。";
  }catch(e){
    console.error(e);
    cameraStarted=false;
    if(err){
-     err.innerHTML="カメラが起動できませんでした。<br>① ブラウザのカメラを許可<br>② Vercelなど https のURLで開く<br>③ ほかのアプリでカメラを閉じる<br>④ スマホの設定でブラウザのカメラ許可をON<br>を確認してください。";
+     err.innerHTML="カメラがきどうできませんでした。<br>① ブラウザのカメラをきょか<br>②ほかのアプリでカメラをとじる<br>③スマホのせっていでブラウザのカメラきょかをON<br>かくにんしてください。";
    }
  }
 }
